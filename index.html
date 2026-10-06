@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-[#F2F2F7]">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Almacén - Registro de Entregas</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- ZXing Scanner -->
+  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: [
+              '-apple-system',
+              'BlinkMacSystemFont',
+              '"SF Pro Display"',
+              '"SF Pro Text"',
+              '"Helvetica Neue"',
+              'Helvetica',
+              'Arial',
+              'sans-serif'
+            ]
+          },
+          colors: {
+            ios: {
+              bg: '#F2F2F7',
+              card: '#FFFFFF',
+              secondaryBg: '#E5E5EA',
+              fill: 'rgba(120, 120, 128, 0.12)',
+              blue: '#007AFF',
+              green: '#34C759',
+              amber: '#FF9500',
+              red: '#FF3B30',
+              purple: '#AF52DE',
+              text: '#1C1C1E',
+              subtext: '#8E8E93',
+              separator: 'rgba(60, 60, 67, 0.12)'
+            }
+          },
+          boxShadow: {
+            'ios-sm': '0 1px 2px rgba(0, 0, 0, 0.04)',
+            'ios': '0 4px 14px rgba(0, 0, 0, 0.06)',
+            'ios-float': '0 12px 32px rgba(0, 0, 0, 0.12)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* San Francisco Typography feel & smoothing */
+    body {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      touch-action: manipulation;
+    }
+
+    /* Prevent accidental pull to refresh when drawing signature */
+    canvas {
+      touch-action: none;
+    }
+
+    /* Smooth animated pill for Segmented Control */
+    .segmented-pill {
+      transition: transform 0.26s cubic-bezier(0.36, 0.66, 0.04, 1), width 0.26s cubic-bezier(0.36, 0.66, 0.04, 1);
+    }
+
+    /* Dynamic Island notification keyframes */
+    @keyframes islandExpand {
+      0% {
+        transform: translate(-50%, -20px) scale(0.85);
+        opacity: 0;
+      }
+      60% {
+        transform: translate(-50%, 4px) scale(1.02);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(-50%, 0) scale(1);
+        opacity: 1;
+      }
+    }
+
+    .island-enter {
+      animation: islandExpand 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Scanner red guide line */
+    .scanner-line {
+      animation: scanLaser 2.2s infinite ease-in-out;
+    }
+    @keyframes scanLaser {
+      0%, 100% { top: 10%; opacity: 0.7; }
+      50% { top: 85%; opacity: 1; }
+    }
+
+    /* Hide scrollbars */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+
+<body class="min-h-full flex flex-col text-ios-text select-none">
+
+  <!-- Dynamic Island Notification Toast -->
+  <div id="dynamicIsland" class="fixed top-3 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 hidden">
+    <div class="island-enter bg-black/90 text-white backdrop-blur-xl px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-3 border border-white/15">
+      <div id="islandIconContainer" class="w-6 h-6 rounded-full bg-ios-green flex items-center justify-center text-white">
+        <i data-lucide="check" class="w-3.5 h-3.5 stroke-[3]"></i>
+      </div>
+      <div class="text-xs">
+        <p id="islandTitle" class="font-semibold tracking-tight text-white leading-tight">Entrega Registrada</p>
+        <p id="islandSubtitle" class="text-[11px] text-white/70 leading-tight">Albarán guardado en almacén</p>
+      </div>
+    </div>
+  </div>
+
+  <header class="sticky top-0 z-30 bg-[#F2F2F7]/85 backdrop-blur-xl border-b border-black/[0.06]">
+    <div class="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <!-- Minimalist Apple SF-style Line-Art Package Icon -->
+        <div class="w-9 h-9 rounded-2xl bg-white border border-black/10 flex items-center justify-center shadow-ios-sm">
+          <svg class="w-5 h-5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3.5L20.5 8V16L12 20.5L3.5 16V8L12 3.5Z" />
+            <path d="M12 3.5V12" />
+            <path d="M12 12L20.5 8" />
+            <path d="M12 12L3.5 8" />
+            <path d="M12 12V20.5" />
+            <path d="M7.7 5.7L16.3 10.3" stroke-dasharray="1.2 1.2" opacity="0.6" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <h1 class="text-[17px] font-semibold tracking-tight text-black leading-snug">
+              Entregas
+            </h1>
+            <span class="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-black/5 text-ios-subtext">
+              Hub
+            </span>
+            <span class="text-[9px] tracking-[0.18em] font-bold text-neutral-400 uppercase bg-neutral-200/60 px-1.5 py-0.5 rounded">
+              A MORALEJO BRAND
+            </span>
+          </div>
+          <p class="text-[11px] text-ios-subtext leading-none mt-0.5">Control de Salidas de Almacén</p>
+        </div>
+      </div>
+
+      <!-- Segmented Navigation (Registro / Historial) -->
+      <div class="bg-black/[0.08] p-1 rounded-full flex items-center">
+        <button 
+          id="navBtnRegister" 
+          onclick="switchView('register')" 
+          class="px-3.5 py-1 text-xs font-semibold rounded-full transition-all duration-200 bg-white text-black shadow-ios-sm"
+        >
+          Salidas
+        </button>
+        <button 
+          id="navBtnHistory" 
+          onclick="switchView('history')" 
+          class="px-3.5 py-1 text-xs font-semibold rounded-full transition-all duration-200 text-ios-subtext hover:text-black flex items-center gap-1"
+        >
+          <span>Historial</span>
+          <span id="navCountBadge" class="bg-black/10 text-black text-[10px] px-1.5 py-0.2 rounded-full font-bold">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-2xl w-full mx-auto px-4 pt-5 pb-8 space-y-5">
+
+    <!-- VIEW 1: REGISTRO DE SALIDAS -->
+    <div id="viewRegister" class="space-y-5">
+      
+      <!-- iOS Segmented Control: Cliente vs Agencia -->
+      <div class="space-y-1.5">
+        <label class="text-[11px] font-semibold text-ios-subtext uppercase tracking-wider ml-1">
+          Canal de Entrega
+        </label>
+        <div class="relative bg-black/[0.07] p-1 rounded-2xl flex items-center">
+          <div id="segmentIndicator" class="segmented-pill absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-xl shadow-ios-sm left-1"></div>
+          
+          <button 
+            type="button" 
+            onclick="setDeliveryChannel('CLIENTE')" 
+            id="segClientBtn" 
+            class="relative z-10 flex-1 py-2.5 text-center text-xs font-semibold text-black transition-colors flex items-center justify-center gap-2"
+          >
+            <i data-lucide="user" class="w-4 h-4 text-ios-blue"></i>
+            <span>Cliente Mostrador</span>
+          </button>
+
+          <button 
+            type="button" 
+            onclick="setDeliveryChannel('AGENCIA')" 
+            id="segAgencyBtn" 
+            class="relative z-10 flex-1 py-2.5 text-center text-xs font-semibold text-ios-subtext transition-colors flex items-center justify-center gap-2"
+          >
+            <i data-lucide="truck" class="w-4 h-4 text-ios-amber"></i>
+            <span>Agencia de Transporte</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Grouped Card: Albarán / Código de barras -->
+      <div class="bg-white rounded-3xl p-5 shadow-ios border border-black/[0.04] space-y-4">
+        <div class="flex items-center justify-between">
+          <label for="albaranInput" class="text-xs font-semibold text-ios-subtext uppercase tracking-wider">
+            Albarán o Código de Pedido
+          </label>
+          <span class="text-[11px] text-ios-blue font-medium flex items-center gap-1 cursor-default">
+            <i data-lucide="scan" class="w-3.5 h-3.5"></i>
+            PDA & Escáner activo
+          </span>
+        </div>
+
+        <!-- Input Field iOS Style -->
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-ios-subtext">
+            <i data-lucide="barcode" class="w-5 h-5"></i>
+          </div>
+          <input 
+            type="text" 
+            id="albaranInput" 
+            placeholder="Escriba o escanee..." 
+            autocomplete="off" 
+            spellcheck="false"
+            class="w-full bg-[#F2F2F7] rounded-2xl pl-12 pr-12 py-3.5 text-lg font-mono font-semibold tracking-wide text-black placeholder:text-black/30 placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-ios-blue/40 border border-transparent transition-all uppercase"
+          >
+          <button 
+            id="clearAlbaranBtn" 
+            type="button" 
+            onclick="clearInputAlbaran()" 
+            class="hidden absolute inset-y-0 right-0 pr-3.5 flex items-center text-ios-subtext hover:text-black transition"
+          >
+            <i data-lucide="x-circle" class="w-5 h-5 fill-black/20 text-white"></i>
+          </button>
+        </div>
+
+        <!-- Camera Scanner Button -->
+        <button 
+          type="button" 
+          onclick="startCameraScanner()" 
+          class="w-full py-3 px-4 rounded-2xl bg-black/[0.04] hover:bg-black/[0.07] active:scale-[0.99] text-xs font-semibold text-ios-blue flex items-center justify-center gap-2 transition"
+        >
+          <i data-lucide="camera" class="w-4 h-4 text-ios-blue"></i>
+          <span>Abrir Escáner con Cámara del Dispositivo</span>
+        </button>
+      </div>
+
+      <!-- Action Buttons (Cancelar vs Entregar) -->
+      <div class="flex items-center gap-3 pt-1">
+        <button 
+          type="button" 
+          onclick="resetCurrentWorkflow()" 
+          class="flex-1 py-3.5 px-4 rounded-2xl bg-white text-ios-red font-semibold text-sm shadow-ios active:scale-95 transition border border-black/[0.04] flex items-center justify-center gap-1.5"
+        >
+          <i data-lucide="trash" class="w-4 h-4"></i>
+          <span>Cancelar</span>
+        </button>
+
+        <button 
+          id="btnProceed" 
+          type="button" 
+          onclick="openDeliveryModal()" 
+          class="flex-[2] py-3.5 px-4 rounded-2xl bg-ios-blue active:scale-95 text-white font-semibold text-sm shadow-ios shadow-ios-blue/25 hover:opacity-95 transition flex items-center justify-center gap-2"
+        >
+          <span>Gestionar Entrega</span>
+          <i data-lucide="arrow-right" class="w-4 h-4 stroke-[2.5]"></i>
+        </button>
+      </div>
+
+      <!-- Micro Info Card -->
+      <div class="bg-white/70 backdrop-blur rounded-2xl p-4 border border-black/[0.04] flex items-start gap-3">
+        <div class="w-8 h-8 rounded-full bg-ios-blue/10 text-ios-blue flex items-center justify-center shrink-0 mt-0.5">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+        </div>
+        <p class="text-xs text-ios-subtext leading-relaxed">
+          <strong class="text-black font-semibold">Consejo de uso:</strong> Puede conectar lectores láser por Bluetooth o USB. Al pulsar <em class="text-black font-semibold">Enter</em> con el código escaneado, se abrirá la pantalla de recogida directamente.
+        </p>
+      </div>
+    </div>
+
+    <!-- VIEW 2: HISTORIAL DE ENTREGAS -->
+    <div id="viewHistory" class="hidden space-y-4">
+      <!-- Search & CSV export toolbar -->
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 text-ios-subtext absolute left-3.5 top-3 pointer-events-none"></i>
+          <input 
+            type="text" 
+            id="searchHistoryInput" 
+            oninput="renderHistoryList()" 
+            placeholder="Buscar por albarán o persona..." 
+            class="w-full bg-white rounded-2xl pl-10 pr-4 py-2.5 text-xs text-black placeholder:text-ios-subtext border border-black/[0.04] shadow-ios-sm focus:outline-none focus:ring-2 focus:ring-ios-blue/40"
+          >
+        </div>
+        <button 
+          onclick="exportHistoryToCSV()" 
+          class="px-3.5 py-2.5 bg-white text-ios-blue rounded-2xl border border-black/[0.04] shadow-ios-sm text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition"
+        >
+          <i data-lucide="share" class="w-3.5 h-3.5"></i>
+          <span>CSV</span>
+        </button>
+      </div>
+
+      <!-- History Cards Container -->
+      <div id="historyListContainer" class="space-y-2.5">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </main>
+
+  <footer class="mt-auto py-6 border-t border-black/[0.06] text-center px-4">
+    <div class="max-w-2xl mx-auto flex flex-col items-center gap-1.5">
+      <div class="flex items-center justify-center gap-2 flex-wrap text-xs text-neutral-500 font-medium">
+        <span class="text-black font-semibold">Entregas Hub</span>
+        <span class="text-neutral-300">•</span>
+        <span class="text-[10px] tracking-[0.2em] font-bold text-neutral-500 uppercase bg-black/[0.04] px-2 py-0.5 rounded-full">A MORALEJO BRAND</span>
+      </div>
+      <p class="text-[11px] text-ios-subtext">Diseñado para control logístico, muelles de carga y salidas de almacén</p>
+    </div>
+  </footer>
+
+  <div id="modalDelivery" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm hidden flex flex-col justify-end sm:justify-center items-center p-0 sm:p-4 transition-opacity duration-300">
+    <div class="w-full max-w-lg bg-white rounded-t-[32px] sm:rounded-[32px] shadow-ios-float max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-200">
+      
+      <!-- Grabber for iOS feel -->
+      <div class="pt-3 pb-1 flex justify-center sm:hidden">
+        <div class="w-10 h-1 bg-black/20 rounded-full"></div>
+      </div>
+
+      <!-- Modal Header -->
+      <div class="px-6 py-3.5 border-b border-ios-separator flex items-center justify-between">
+        <div>
+          <span id="modalChannelBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-ios-blue/10 text-ios-blue uppercase tracking-wider">
+            Cliente Mostrador
+          </span>
+          <h2 class="text-base font-bold text-black mt-0.5 flex items-center gap-1.5">
+            Albarán: <span id="modalAlbaranDisplay" class="font-mono text-ios-blue tracking-wide">ALB-0000</span>
+          </h2>
+        </div>
+        <button 
+          type="button" 
+          onclick="closeDeliveryModal()" 
+          class="w-8 h-8 rounded-full bg-black/[0.06] text-black/70 hover:text-black flex items-center justify-center transition"
+        >
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Modal Scrollable Content -->
+      <div class="p-6 space-y-4 overflow-y-auto no-scrollbar flex-1 text-xs">
+        
+        <!-- Bloque opcional para Transportista / Agencia -->
+        <div id="modalAgencyBlock" class="p-4 rounded-2xl bg-ios-amber/5 border border-ios-amber/20 space-y-3.5 hidden">
+          <div class="flex items-center gap-2 text-ios-amber font-bold text-[11px] uppercase tracking-wider">
+            <i data-lucide="truck" class="w-4 h-4"></i>
+            <span>Datos de la Agencia y Fotografía</span>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold text-ios-subtext mb-1 uppercase">Empresa de Transporte</label>
+            <select id="agencySelect" class="w-full px-3.5 py-2.5 bg-white border border-black/[0.08] rounded-xl text-black font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-ios-amber/40">
+              <option value="GLS">GLS Spain</option>
+              <option value="SEUR">SEUR / DPD</option>
+              <option value="DHL">DHL Express / Freight</option>
+              <option value="Correos Express">Correos Express</option>
+              <option value="MRW">MRW</option>
+              <option value="Ontime">Ontime Logística</option>
+              <option value="FedEx">FedEx / TNT</option>
+              <option value="DACHSER">DACHSER</option>
+              <option value="TXT">TXT Almacenaje</option>
+              <option value="OTRA">Otra Agencia o Repartidor Particular</option>
+            </select>
+          </div>
+
+          <!-- Captura de foto con compresión automática -->
+          <div class="space-y-2">
+            <label class="block text-[11px] font-semibold text-ios-subtext uppercase">Comprobante / Bultos Fotografiados</label>
+            <input type="file" id="agencyPhotoFile" accept="image/*" capture="environment" onchange="processAgencyPhoto(event)" class="hidden">
+            
+            <div class="flex items-center gap-2">
+              <button 
+                type="button" 
+                onclick="document.getElementById('agencyPhotoFile').click()" 
+                class="px-3.5 py-2 rounded-xl bg-white border border-black/[0.08] font-semibold text-xs text-black flex items-center gap-2 shadow-ios-sm active:scale-95 transition"
+              >
+                <i data-lucide="camera" class="w-3.5 h-3.5 text-ios-amber"></i>
+                <span id="photoBtnLabel">Hacer / Subir Foto</span>
+              </button>
+              <span id="photoIndicatorText" class="text-[11px] text-ios-subtext italic">Recomendado para agencias</span>
+            </div>
+
+            <!-- Preview miniatura -->
+            <div id="photoPreviewCard" class="relative inline-block mt-1 hidden">
+              <img id="photoPreviewImg" src="" alt="Comprobante" class="h-20 w-32 object-cover rounded-xl border border-black/10 shadow-sm">
+              <button 
+                type="button" 
+                onclick="removeCapturedPhoto()" 
+                class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-ios-red text-white rounded-full flex items-center justify-center shadow"
+              >
+                <i data-lucide="x" class="w-3 h-3"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Identificación del Receptor -->
+        <div class="space-y-3">
+          <div>
+            <label for="personNameInput" class="block text-[11px] font-semibold text-ios-subtext uppercase mb-1">
+              Nombre y Apellidos de quien recoge <span class="text-ios-red">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="personNameInput" 
+              placeholder="Ej. Roberto Sánchez" 
+              class="w-full bg-[#F2F2F7] rounded-xl px-3.5 py-2.5 text-xs text-black font-medium border border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition"
+            >
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label for="personDocInput" class="block text-[11px] font-semibold text-ios-subtext uppercase mb-1">
+                DNI / NIE / ID
+              </label>
+              <input 
+                type="text" 
+                id="personDocInput" 
+                placeholder="12345678Z" 
+                class="w-full bg-[#F2F2F7] rounded-xl px-3.5 py-2.5 text-xs text-black font-medium uppercase border border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition"
+              >
+            </div>
+            <div>
+              <label for="deliveryPackagesInput" class="block text-[11px] font-semibold text-ios-subtext uppercase mb-1">
+                Bultos / Notas
+              </label>
+              <input 
+                type="text" 
+                id="deliveryPackagesInput" 
+                placeholder="1 caja / 2 palets" 
+                class="w-full bg-[#F2F2F7] rounded-xl px-3.5 py-2.5 text-xs text-black font-medium border border-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas de Firma Digital Táctil Estilo Apple -->
+        <div class="space-y-1.5 pt-1">
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-semibold text-ios-subtext uppercase tracking-wider flex items-center gap-1">
+              <i data-lucide="edit-3" class="w-3.5 h-3.5 text-ios-blue"></i>
+              <span>Firma del Receptor <span class="text-ios-red">*</span></span>
+            </label>
+            <button 
+              type="button" 
+              onclick="clearSignatureCanvas()" 
+              class="text-[11px] font-semibold text-ios-red active:opacity-60 transition"
+            >
+              Borrar firma
+            </button>
+          </div>
+
+          <div class="relative bg-white rounded-2xl border border-black/15 overflow-hidden shadow-inner h-36">
+            <canvas id="signaturePad" class="w-full h-full block cursor-crosshair"></canvas>
+            <div id="sigHelperText" class="pointer-events-none absolute inset-0 flex items-center justify-center text-black/20 text-xs font-medium">
+              Firme con el dedo o stylus aquí
+            </div>
+            <div class="pointer-events-none absolute bottom-5 left-6 right-6 border-b border-dashed border-black/10"></div>
+          </div>
+        </div>
+
+        <!-- Alerta de validación interior -->
+        <div id="modalErrorNotice" class="hidden p-3 rounded-xl bg-ios-red/10 border border-ios-red/20 text-ios-red text-xs font-semibold flex items-center gap-2">
+          <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+          <span id="modalErrorText">Por favor revise los campos obligatorios.</span>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-4 border-t border-ios-separator bg-white flex items-center gap-3">
+        <button 
+          type="button" 
+          onclick="closeDeliveryModal()" 
+          class="flex-1 py-3 rounded-2xl bg-black/[0.06] text-black font-semibold text-xs active:scale-95 transition"
+        >
+          Atrás
+        </button>
+        <button 
+          type="button" 
+          onclick="submitFinalDelivery()" 
+          class="flex-[2] py-3 rounded-2xl bg-ios-green active:scale-95 text-white font-semibold text-xs shadow-ios shadow-ios-green/30 flex items-center justify-center gap-1.5 transition"
+        >
+          <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+          <span>Confirmar y Guardar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalCameraScanner" class="fixed inset-0 z-50 bg-black/95 hidden flex flex-col justify-between p-4 sm:p-6 backdrop-blur-xl">
+    <div class="flex items-center justify-between text-white max-w-md mx-auto w-full">
+      <div class="flex items-center gap-2">
+        <i data-lucide="scan-line" class="w-5 h-5 text-ios-blue"></i>
+        <span class="text-sm font-semibold tracking-tight">Escaneando Albarán</span>
+      </div>
+      <button onclick="stopCameraScanner()" class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- Video viewport -->
+    <div class="relative w-full max-w-sm aspect-square mx-auto rounded-3xl overflow-hidden bg-black border border-white/10 flex items-center justify-center">
+      <video id="videoElement" class="w-full h-full object-cover"></video>
+      
+      <!-- Visual Scan Box -->
+      <div class="absolute inset-8 border-2 border-dashed border-white/70 rounded-2xl pointer-events-none flex items-center justify-center">
+        <div class="scanner-line absolute left-0 right-0 h-0.5 bg-ios-red shadow-[0_0_10px_#FF3B30]"></div>
+      </div>
+
+      <div id="scannerInitMsg" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-2 text-white/70 text-xs">
+        <div class="w-6 h-6 border-2 border-ios-blue border-t-transparent rounded-full animate-spin"></div>
+        <span>Iniciando sensor de cámara...</span>
+      </div>
+    </div>
+
+    <div class="text-center text-white/60 text-xs pb-4 max-w-xs mx-auto">
+      Oriente el código de barras 1D (Code128/EAN) o QR dentro del recuadro.
+    </div>
+  </div>
+
+  <div id="modalReceiptView" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-white rounded-3xl shadow-ios-float overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="px-5 py-3.5 border-b border-ios-separator flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-black flex items-center gap-2">
+            <i data-lucide="receipt" class="w-4 h-4 text-ios-blue"></i>
+            <span>Resguardo de Entrega</span>
+          </h3>
+          <span class="text-[9px] font-bold tracking-[0.16em] text-neutral-400 uppercase">A MORALEJO BRAND</span>
+        </div>
+        <button onclick="closeReceiptModal()" class="w-7 h-7 rounded-full bg-black/[0.06] flex items-center justify-center text-black/60">
+          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+
+      <div id="receiptContentBody" class="p-5 space-y-4 overflow-y-auto no-scrollbar text-xs">
+        <!-- Injected via JS -->
+      </div>
+
+      <div class="px-5 py-3 border-t border-ios-separator bg-white flex items-center justify-between gap-3">
+        <button onclick="window.print()" class="flex-1 py-2.5 rounded-xl bg-black/[0.05] text-black font-semibold text-xs flex items-center justify-center gap-1.5">
+          <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+          <span>Imprimir</span>
+        </button>
+        <button onclick="closeReceiptModal()" class="flex-1 py-2.5 rounded-xl bg-ios-blue text-white font-semibold text-xs">
+          Listo
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const appState = {
+      selectedChannel: 'CLIENTE', // 'CLIENTE' | 'AGENCIA'
+      deliveries: [],
+      currentPhotoBase64: null,
+      isSigDrawn: false,
+      codeReaderInstance: null
+    };
+
+    /* IndexedDB Management */
+    const DB_NAME = 'WarehouseDeliveriesDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'records';
+    let dbInstance = null;
+
+    function initIndexedDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+            store.createIndex('albaran', 'albaran', { unique: false });
+            store.createIndex('timestamp', 'timestamp', { unique: false });
+          }
+        };
+        req.onsuccess = (e) => {
+          dbInstance = e.target.result;
+          resolve(dbInstance);
+        };
+        req.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    async function loadDeliveriesFromDB() {
+      if (!dbInstance) await initIndexedDB();
+      return new Promise((resolve, reject) => {
+        const tx = dbInstance.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () => {
+          const list = req.result || [];
+          list.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          appState.deliveries = list;
+          updateCounters();
+          renderHistoryList();
+          resolve(list);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function persistDelivery(record) {
+      if (!dbInstance) await initIndexedDB();
+      return new Promise((resolve, reject) => {
+        const tx = dbInstance.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.put(record);
+        req.onsuccess = () => {
+          appState.deliveries.unshift(record);
+          updateCounters();
+          renderHistoryList();
+          resolve(true);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // Audio Haptics (Tone feedback)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function triggerHapticSound(kind = 'click') {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+
+        if (kind === 'click') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, now);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+          osc.start(now);
+          osc.stop(now + 0.04);
+        } else if (kind === 'success') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.setValueAtTime(659.25, now + 0.08);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        } else if (kind === 'error') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(220, now);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+          osc.start(now);
+          osc.stop(now + 0.2);
+        }
+      } catch (err) {
+        console.warn('Audio note suppressed:', err);
+      }
+    }
+
+    function showDynamicIsland(title, subtitle, type = 'success') {
+      const island = document.getElementById('dynamicIsland');
+      const titleEl = document.getElementById('islandTitle');
+      const subEl = document.getElementById('islandSubtitle');
+      const iconContainer = document.getElementById('islandIconContainer');
+
+      titleEl.textContent = title;
+      subEl.textContent = subtitle;
+
+      if (type === 'success') {
+        iconContainer.className = "w-6 h-6 rounded-full bg-ios-green flex items-center justify-center text-white";
+        iconContainer.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5 stroke-[3]"></i>';
+      } else {
+        iconContainer.className = "w-6 h-6 rounded-full bg-ios-red flex items-center justify-center text-white";
+        iconContainer.innerHTML = '<i data-lucide="alert-triangle" class="w-3.5 h-3.5 stroke-[3]"></i>';
+      }
+
+      lucide.createIcons();
+      island.classList.remove('hidden');
+
+      setTimeout(() => {
+        island.classList.add('hidden');
+      }, 3500);
+    }
+
+    function setDeliveryChannel(channel) {
+      triggerHapticSound('click');
+      appState.selectedChannel = channel;
+      const indicator = document.getElementById('segmentIndicator');
+      const clientBtn = document.getElementById('segClientBtn');
+      const agencyBtn = document.getElementById('segAgencyBtn');
+
+      if (channel === 'CLIENTE') {
+        indicator.style.transform = 'translateX(0%)';
+        clientBtn.classList.replace('text-ios-subtext', 'text-black');
+        agencyBtn.classList.replace('text-black', 'text-ios-subtext');
+      } else {
+        indicator.style.transform = 'translateX(100%)';
+        agencyBtn.classList.replace('text-ios-subtext', 'text-black');
+        clientBtn.classList.replace('text-black', 'text-ios-subtext');
+      }
+    }
+
+    function switchView(tab) {
+      triggerHapticSound('click');
+      const viewReg = document.getElementById('viewRegister');
+      const viewHist = document.getElementById('viewHistory');
+      const navReg = document.getElementById('navBtnRegister');
+      const navHist = document.getElementById('navBtnHistory');
+
+      if (tab === 'register') {
+        viewReg.classList.remove('hidden');
+        viewHist.classList.add('hidden');
+        navReg.className = "px-3.5 py-1 text-xs font-semibold rounded-full transition-all bg-white text-black shadow-ios-sm";
+        navHist.className = "px-3.5 py-1 text-xs font-semibold rounded-full transition-all text-ios-subtext hover:text-black flex items-center gap-1";
+      } else {
+        viewReg.classList.add('hidden');
+        viewHist.classList.remove('hidden');
+        navHist.className = "px-3.5 py-1 text-xs font-semibold rounded-full transition-all bg-white text-black shadow-ios-sm flex items-center gap-1";
+        navReg.className = "px-3.5 py-1 text-xs font-semibold rounded-full transition-all text-ios-subtext hover:text-black";
+        renderHistoryList();
+      }
+    }
+
+    function clearInputAlbaran() {
+      const input = document.getElementById('albaranInput');
+      input.value = '';
+      document.getElementById('clearAlbaranBtn').classList.add('hidden');
+      input.focus();
+    }
+
+    function resetCurrentWorkflow() {
+      triggerHapticSound('click');
+      clearInputAlbaran();
+      setDeliveryChannel('CLIENTE');
+    }
+
+    function updateCounters() {
+      document.getElementById('navCountBadge').textContent = appState.deliveries.length;
+    }
+
+    let sigCanvas, sigCtx;
+    let isDrawing = false;
+    let prevX = 0, prevY = 0;
+
+    function openDeliveryModal() {
+      const albaran = document.getElementById('albaranInput').value.trim();
+      if (!albaran) {
+        triggerHapticSound('error');
+        const input = document.getElementById('albaranInput');
+        input.classList.add('ring-2', 'ring-ios-red');
+        input.focus();
+        setTimeout(() => input.classList.remove('ring-2', 'ring-ios-red'), 1200);
+        return;
+      }
+
+      triggerHapticSound('click');
+
+      document.getElementById('modalAlbaranDisplay').textContent = albaran.toUpperCase();
+      const badge = document.getElementById('modalChannelBadge');
+      const agencyBlock = document.getElementById('modalAgencyBlock');
+
+      if (appState.selectedChannel === 'AGENCIA') {
+        badge.textContent = 'Agencia de Transporte';
+        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-ios-amber/10 text-ios-amber uppercase tracking-wider';
+        agencyBlock.classList.remove('hidden');
+      } else {
+        badge.textContent = 'Cliente Mostrador';
+        badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full bg-ios-blue/10 text-ios-blue uppercase tracking-wider';
+        agencyBlock.classList.add('hidden');
+      }
+
+      document.getElementById('personNameInput').value = '';
+      document.getElementById('personDocInput').value = '';
+      document.getElementById('deliveryPackagesInput').value = '';
+      document.getElementById('modalErrorNotice').classList.add('hidden');
+      removeCapturedPhoto();
+
+      document.getElementById('modalDelivery').classList.remove('hidden');
+
+      setTimeout(() => {
+        setupSignatureCanvas();
+        document.getElementById('personNameInput').focus();
+      }, 150);
+    }
+
+    function closeDeliveryModal() {
+      triggerHapticSound('click');
+      document.getElementById('modalDelivery').classList.add('hidden');
+    }
+
+    function setupSignatureCanvas() {
+      sigCanvas = document.getElementById('signaturePad');
+      sigCtx = sigCanvas.getContext('2d');
+
+      const rect = sigCanvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      sigCanvas.width = rect.width * dpr;
+      sigCanvas.height = rect.height * dpr;
+      sigCtx.scale(dpr, dpr);
+
+      sigCtx.strokeStyle = '#1C1C1E';
+      sigCtx.lineWidth = 2.4;
+      sigCtx.lineCap = 'round';
+      sigCtx.lineJoin = 'round';
+
+      clearSignatureCanvas();
+
+      sigCanvas.onmousedown = (e) => {
+        isDrawing = true;
+        const pos = getPos(e);
+        prevX = pos.x;
+        prevY = pos.y;
+        hideSigHelper();
+      };
+      window.onmousemove = (e) => {
+        if (!isDrawing) return;
+        const pos = getPos(e);
+        sigCtx.beginPath();
+        sigCtx.moveTo(prevX, prevY);
+        sigCtx.lineTo(pos.x, pos.y);
+        sigCtx.stroke();
+        prevX = pos.x;
+        prevY = pos.y;
+        appState.isSigDrawn = true;
+      };
+      window.onmouseup = () => { isDrawing = false; };
+
+      sigCanvas.ontouchstart = (e) => {
+        if (e.touches.length === 1) {
+          e.preventDefault();
+          isDrawing = true;
+          const pos = getPos(e.touches[0]);
+          prevX = pos.x;
+          prevY = pos.y;
+          hideSigHelper();
+        }
+      };
+      sigCanvas.ontouchmove = (e) => {
+        if (!isDrawing || e.touches.length !== 1) return;
+        e.preventDefault();
+        const pos = getPos(e.touches[0]);
+        sigCtx.beginPath();
+        sigCtx.moveTo(prevX, prevY);
+        sigCtx.lineTo(pos.x, pos.y);
+        sigCtx.stroke();
+        prevX = pos.x;
+        prevY = pos.y;
+        appState.isSigDrawn = true;
+      };
+      sigCanvas.ontouchend = (e) => {
+        e.preventDefault();
+        isDrawing = false;
+      };
+    }
+
+    function getPos(touchOrMouse) {
+      const rect = sigCanvas.getBoundingClientRect();
+      return {
+        x: touchOrMouse.clientX - rect.left,
+        y: touchOrMouse.clientY - rect.top
+      };
+    }
+
+    function hideSigHelper() {
+      const helper = document.getElementById('sigHelperText');
+      if (helper) helper.classList.add('hidden');
+    }
+
+    function clearSignatureCanvas() {
+      if (!sigCtx) return;
+      sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+      appState.isSigDrawn = false;
+      const helper = document.getElementById('sigHelperText');
+      if (helper) helper.classList.remove('hidden');
+    }
+
+    function processAgencyPhoto(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDimension = 1200;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDimension || h > maxDimension) {
+            if (w > h) {
+              h = Math.round((h * maxDimension) / w);
+              w = maxDimension;
+            } else {
+              w = Math.round((w * maxDimension) / h);
+              h = maxDimension;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+
+          appState.currentPhotoBase64 = canvas.toDataURL('image/jpeg', 0.72);
+
+          document.getElementById('photoPreviewImg').src = appState.currentPhotoBase64;
+          document.getElementById('photoPreviewCard').classList.remove('hidden');
+          document.getElementById('photoBtnLabel').textContent = 'Cambiar Foto';
+          document.getElementById('photoIndicatorText').textContent = 'Foto adjunta con éxito';
+          document.getElementById('photoIndicatorText').className = 'text-[11px] text-ios-green font-semibold';
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeCapturedPhoto() {
+      appState.currentPhotoBase64 = null;
+      document.getElementById('agencyPhotoFile').value = '';
+      document.getElementById('photoPreviewCard').classList.add('hidden');
+      document.getElementById('photoBtnLabel').textContent = 'Hacer / Subir Foto';
+      document.getElementById('photoIndicatorText').textContent = 'Recomendado para agencias';
+      document.getElementById('photoIndicatorText').className = 'text-[11px] text-ios-subtext italic';
+    }
+
+    async function submitFinalDelivery() {
+      const personName = document.getElementById('personNameInput').value.trim();
+      const personDoc = document.getElementById('personDocInput').value.trim();
+      const notes = document.getElementById('deliveryPackagesInput').value.trim();
+      const albaran = document.getElementById('modalAlbaranDisplay').textContent.trim();
+
+      const errorNotice = document.getElementById('modalErrorNotice');
+      const errorText = document.getElementById('modalErrorText');
+      errorNotice.classList.add('hidden');
+
+      if (!personName) {
+        triggerHapticSound('error');
+        errorText.textContent = 'Debe indicar el nombre de quien recoge la mercancía.';
+        errorNotice.classList.remove('hidden');
+        document.getElementById('personNameInput').focus();
+        return;
+      }
+
+      if (!appState.isSigDrawn) {
+        triggerHapticSound('error');
+        errorText.textContent = 'La firma digital es obligatoria para certificar la entrega.';
+        errorNotice.classList.remove('hidden');
+        return;
+      }
+
+      const signatureDataUrl = sigCanvas.toDataURL('image/png');
+
+      const deliveryItem = {
+        id: 'DEL-' + Date.now(),
+        timestamp: new Date().toISOString(),
+        albaran: albaran,
+        canal: appState.selectedChannel,
+        receptor: {
+          nombre: personName,
+          doc: personDoc || 'No facilitado',
+          agencia: appState.selectedChannel === 'AGENCIA' ? document.getElementById('agencySelect').value : null
+        },
+        notas: notes || 'Sin notas adicionales',
+        firma: signatureDataUrl,
+        foto: appState.currentPhotoBase64 || null
+      };
+
+      try {
+        await persistDelivery(deliveryItem);
+        triggerHapticSound('success');
+        closeDeliveryModal();
+        clearInputAlbaran();
+        showDynamicIsland('Entrega Completada', `${albaran} registrado con éxito`, 'success');
+      } catch (err) {
+        console.error('Error saving delivery:', err);
+        errorText.textContent = 'Error al registrar en almacenamiento.';
+        errorNotice.classList.remove('hidden');
+      }
+    }
+
+    async function startCameraScanner() {
+      triggerHapticSound('click');
+      const modal = document.getElementById('modalCameraScanner');
+      const initMsg = document.getElementById('scannerInitMsg');
+      modal.classList.remove('hidden');
+      initMsg.classList.remove('hidden');
+
+      try {
+        appState.codeReaderInstance = new ZXing.BrowserMultiFormatReader();
+        const devices = await appState.codeReaderInstance.listVideoInputDevices();
+        
+        let backCamId = undefined;
+        if (devices.length > 0) {
+          const rearCam = devices.find(d => 
+            d.label.toLowerCase().includes('back') || 
+            d.label.toLowerCase().includes('rear') || 
+            d.label.toLowerCase().includes('trasera')
+          );
+          backCamId = rearCam ? rearCam.deviceId : devices[0].deviceId;
+        }
+
+        initMsg.classList.add('hidden');
+
+        await appState.codeReaderInstance.decodeFromVideoDevice(backCamId, 'videoElement', (result) => {
+          if (result) {
+            triggerHapticSound('click');
+            const code = result.getText();
+            document.getElementById('albaranInput').value = code.toUpperCase();
+            document.getElementById('clearAlbaranBtn').classList.remove('hidden');
+            stopCameraScanner();
+            openDeliveryModal();
+          }
+        });
+      } catch (err) {
+        console.warn('Camera failed:', err);
+        initMsg.classList.add('hidden');
+        stopCameraScanner();
+        showDynamicIsland('Error de Cámara', 'Permiso denegado o no compatible', 'error');
+      }
+    }
+
+    function stopCameraScanner() {
+      const modal = document.getElementById('modalCameraScanner');
+      modal.classList.add('hidden');
+      if (appState.codeReaderInstance) {
+        appState.codeReaderInstance.reset();
+        appState.codeReaderInstance = null;
+      }
+    }
+
+    function renderHistoryList() {
+      const container = document.getElementById('historyListContainer');
+      const filter = (document.getElementById('searchHistoryInput')?.value || '').toLowerCase();
+
+      const items = appState.deliveries.filter(d => 
+        d.albaran.toLowerCase().includes(filter) ||
+        d.receptor.nombre.toLowerCase().includes(filter) ||
+        d.receptor.doc.toLowerCase().includes(filter) ||
+        (d.receptor.agencia && d.receptor.agencia.toLowerCase().includes(filter))
+      );
+
+      if (items.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-3xl p-8 text-center border border-black/[0.04] shadow-ios-sm text-ios-subtext">
+            <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 text-black/20"></i>
+            <p class="text-xs font-semibold text-black">Sin entregas que coincidan</p>
+            <p class="text-[11px] text-ios-subtext mt-0.5">Registre una nueva entrega desde la pestaña Salidas.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = items.map(item => {
+        const isAgency = item.canal === 'AGENCIA';
+        const d = new Date(item.timestamp);
+        const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+        const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+        return `
+          <div onclick="showReceiptDetail('${item.id}')" class="bg-white rounded-2xl p-3.5 border border-black/[0.04] shadow-ios-sm hover:shadow-ios active:scale-[0.99] transition flex items-center justify-between cursor-pointer">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl ${isAgency ? 'bg-ios-amber/10 text-ios-amber' : 'bg-ios-blue/10 text-ios-blue'} flex items-center justify-center shrink-0">
+                <i data-lucide="${isAgency ? 'truck' : 'user-check'}" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono font-bold text-xs text-black">${item.albaran}</span>
+                  <span class="text-[9px] font-bold px-1.5 py-0.2 rounded-full ${isAgency ? 'bg-ios-amber/15 text-ios-amber' : 'bg-ios-blue/15 text-ios-blue'}">
+                    ${isAgency ? (item.receptor.agencia || 'AGENCIA') : 'CLIENTE'}
+                  </span>
+                </div>
+                <p class="text-[11px] text-ios-subtext truncate max-w-[180px] sm:max-w-xs mt-0.5 font-medium">
+                  ${item.receptor.nombre} ${item.receptor.doc !== 'No facilitado' ? `· ${item.receptor.doc}` : ''}
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 text-right">
+              <div>
+                <span class="text-[11px] font-semibold text-black block">${timeStr}</span>
+                <span class="text-[10px] text-ios-subtext block">${dateStr}</span>
+              </div>
+              <i data-lucide="chevron-right" class="w-4 h-4 text-black/20"></i>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    function showReceiptDetail(id) {
+      triggerHapticSound('click');
+      const item = appState.deliveries.find(x => x.id === id);
+      if (!item) return;
+
+      const isAgency = item.canal === 'AGENCIA';
+      const date = new Date(item.timestamp).toLocaleString('es-ES');
+
+      const body = document.getElementById('receiptContentBody');
+      body.innerHTML = `
+        <div class="bg-[#F2F2F7] rounded-2xl p-4 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-bold text-ios-subtext uppercase">Albarán</span>
+            <span class="font-mono font-bold text-sm text-ios-blue">${item.albaran}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-bold text-ios-subtext uppercase">Tipo</span>
+            <span class="font-semibold text-black">${item.canal} ${isAgency ? `(${item.receptor.agencia})` : ''}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-bold text-ios-subtext uppercase">Fecha/Hora</span>
+            <span class="text-black font-medium">${date}</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-bold text-ios-subtext uppercase">Receptor</span>
+            <span class="text-black font-semibold">${item.receptor.nombre} (${item.receptor.doc})</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-bold text-ios-subtext uppercase">Bultos/Notas</span>
+            <span class="text-black/80">${item.notas}</span>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <span class="text-[10px] font-bold text-ios-subtext uppercase">Firma de Conformidad</span>
+          <div class="bg-white rounded-2xl border border-black/10 p-2 flex items-center justify-center">
+            <img src="${item.firma}" alt="Firma" class="h-24 max-w-full object-contain">
+          </div>
+        </div>
+
+        ${item.foto ? `
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold text-ios-subtext uppercase">Foto de Albarán / Mercancía</span>
+            <div class="rounded-2xl border border-black/10 overflow-hidden">
+              <img src="${item.foto}" alt="Comprobante" class="w-full max-h-56 object-cover">
+            </div>
+          </div>
+        ` : ''}
+      `;
+
+      document.getElementById('modalReceiptView').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeReceiptModal() {
+      document.getElementById('modalReceiptView').classList.add('hidden');
+    }
+
+    function exportHistoryToCSV() {
+      if (appState.deliveries.length === 0) {
+        showDynamicIsland('Sin Datos', 'No existen registros para exportar', 'error');
+        return;
+      }
+
+      triggerHapticSound('click');
+      const headers = ['ID', 'Fecha_ISO', 'Albaran', 'Canal', 'Receptor_Nombre', 'Receptor_ID', 'Agencia', 'Notas', 'Tiene_Foto'];
+      const rows = appState.deliveries.map(d => [
+        `"${d.id}"`,
+        `"${d.timestamp}"`,
+        `"${d.albaran}"`,
+        `"${d.canal}"`,
+        `"${(d.receptor.nombre || '').replace(/"/g, '""')}"`,
+        `"${(d.receptor.doc || '').replace(/"/g, '""')}"`,
+        `"${(d.receptor.agencia || '').replace(/"/g, '""')}"`,
+        `"${(d.notas || '').replace(/"/g, '""')}"`,
+        d.foto ? 'SI' : 'NO'
+      ]);
+
+      const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `entregas_moralejo_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showDynamicIsland('CSV Generado', 'Descarga completada', 'success');
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      await initIndexedDB();
+      await loadDeliveriesFromDB();
+
+      const albaranInp = document.getElementById('albaranInput');
+      albaranInp.focus();
+
+      albaranInp.addEventListener('input', () => {
+        const btnClear = document.getElementById('clearAlbaranBtn');
+        if (albaranInp.value.trim().length > 0) {
+          btnClear.classList.remove('hidden');
+        } else {
+          btnClear.classList.add('hidden');
+        }
+      });
+
+      // Quick-scan hardware PDA return key trigger
+      albaranInp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (albaranInp.value.trim().length > 0) {
+            openDeliveryModal();
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
